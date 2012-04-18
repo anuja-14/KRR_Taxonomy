@@ -1,0 +1,277 @@
+package tree;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+
+import org.jdom.Element;
+
+public class Tree {
+	DLUnit dlunit;
+	public  Element thingName = new Element("THING");
+	public  Element thingConcept = new Element("THING");
+	public  ArrayList<TreeNode> thingsChildren = new ArrayList<TreeNode>();
+	public  ArrayList<TreeNode> thingsConstantsChildren = new ArrayList<TreeNode>();
+
+	
+	public TreeNode THING = new TreeNode(thingName , thingConcept, thingsChildren, thingsConstantsChildren);
+
+
+	public Tree()
+	{
+		dlunit = new DLUnit();
+	}
+
+	public ArrayList<TreeNode> getParentList(TreeNode node)
+	{
+		ArrayList<TreeNode> nodes = new ArrayList<TreeNode>();
+		ArrayList<TreeNode> parentList = new ArrayList<TreeNode>();
+		ArrayList<TreeNode> temp = new ArrayList<TreeNode>();
+		nodes.add(this.THING);
+		while(!nodes.isEmpty())
+		{
+			temp.clear();
+			System.out.println("getParentlIst");
+			for (Iterator iterator = nodes.iterator(); iterator.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				temp.add(treeNode);
+				if(treeNode.children.contains(node))
+				{
+					parentList.add(treeNode);
+				}
+			}
+			nodes.removeAll(temp);
+			for (TreeNode treeNode : temp) {
+				if(treeNode!=null & treeNode.children.size() !=0)
+					nodes.addAll(treeNode.children);
+			}
+		}
+		return parentList;
+	}
+	public ArrayList<TreeNode> getMostGeneralSubsumeees(ArrayList<TreeNode> mostSpecific, Element givenConcept)
+	{
+		ArrayList<TreeNode> mostGenericSubsumees = (ArrayList<TreeNode>)mostSpecific.clone();
+		ArrayList<TreeNode> temp = new ArrayList<TreeNode>();
+		ArrayList<TreeNode> temp2 = new ArrayList<TreeNode>();
+		boolean childrenLeft = true;
+		//Get the most general subsumee list
+		while(childrenLeft)
+		{
+			childrenLeft =  false;
+			for (Iterator iterator = mostGenericSubsumees.iterator(); iterator
+			.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				if(!(dlunit.structureMatch(treeNode.concept, givenConcept)))
+				{
+					temp.add(treeNode);
+				}
+			}
+			//Temp list is created because without it the code gives concurrent modification exception
+			//All the elements the temp List is removed from the generalSubsumee list and all their children are added
+			for (Iterator iterator = temp.iterator(); iterator.hasNext();) {
+
+				TreeNode treeNode = (TreeNode) iterator.next();	
+				mostGenericSubsumees.remove(treeNode);
+				for (TreeNode treeNodeIt : treeNode.children) {
+					mostGenericSubsumees.add(treeNodeIt);
+				}
+			}
+
+
+		}
+		//Remove elements whose parents are also there in the generalsubsumee list
+
+		for (Iterator iterator = mostGenericSubsumees.iterator(); iterator.hasNext();) {
+			TreeNode treeNode = (TreeNode) iterator.next();
+			ArrayList<TreeNode> parentList = getParentList(treeNode);
+
+			for (Iterator iterator2 = parentList.iterator(); iterator2
+			.hasNext();) {
+				TreeNode treeNode1 = (TreeNode) iterator2.next();
+				if(mostGenericSubsumees.contains(treeNode1))
+				{
+					temp2.add(treeNode1);
+				}
+			}
+		}
+		for (Iterator iterator2 = temp2.iterator(); iterator2
+		.hasNext();) {
+			TreeNode treeNode = (TreeNode) iterator2.next();
+			mostGenericSubsumees.remove(treeNode);
+		}
+		return mostGenericSubsumees;
+	}
+	public ArrayList<TreeNode> getMostSpecificSubsumers (Element newConcept){
+		ArrayList<TreeNode> subsumerList = new ArrayList<TreeNode>();
+		subsumerList.add(this.THING);
+		Boolean childrenLeft = true;
+		ArrayList<TreeNode> currChildren = null;
+		Boolean removeParent = false;
+
+		while (childrenLeft){
+			childrenLeft = false;
+			for (TreeNode currSubsumer : subsumerList) {
+				removeParent = false;
+				for (TreeNode currChild : currSubsumer.children) {
+					// Add subsuming children of currSubsumer to subsumerList
+					if ((dlunit.structureMatch(newConcept, currChild.concept))){
+						childrenLeft = true;
+						removeParent = true;
+						subsumerList.add (currChild);
+					}
+				}
+				if (removeParent){
+					subsumerList.remove(currSubsumer);
+				}
+			}
+		}
+		return subsumerList;
+	}
+	public void addNodeFromSentence (Element elem1, Element elem2, String relation){
+
+		if (relation == "==") {
+			TreeNode newNode = new TreeNode(elem1, elem2, null, null);
+			System.out.println("adding sentence eqto");
+			ArrayList<TreeNode> mostSpecificSubsumersList = this.getMostSpecificSubsumers(elem2);
+			ArrayList<TreeNode> mostGeneralSubsumeesList = this.getMostGeneralSubsumeees(mostSpecificSubsumersList,elem2);
+			//		ArrayList<TreeNode> mostGeneralSubsumeesList = this.getMostSpecificSubsumers(elem2);
+			ArrayList<TreeNode> intersection = (ArrayList<TreeNode>) mostSpecificSubsumersList.clone();
+			intersection.retainAll(mostGeneralSubsumeesList);
+
+			if (intersection.isEmpty ()) {
+				for (TreeNode subsumerNode : mostSpecificSubsumersList) {
+					// Remove links between mostSpecificSubsumersList and mostGeneralSubsumeesList
+					subsumerNode.children.removeAll(mostGeneralSubsumeesList);
+
+					// Add the new node as a child to each subsumer
+					subsumerNode.children.add(newNode);
+				}
+				// Add links from newNode to all the subsumees.
+				newNode.children.addAll(mostGeneralSubsumeesList);
+
+				// Handling constants
+				// Get constants that are children of all the subsumers.
+				ArrayList<TreeNode> constantsList = null;
+				if (!mostSpecificSubsumersList.isEmpty()) {
+					constantsList = mostSpecificSubsumersList.get(0).constantsChildren;
+					for (TreeNode currNode : mostSpecificSubsumersList) {
+						constantsList.retainAll(currNode.constantsChildren);
+					}
+				}
+
+				// Get all constants subsumed by mostGeneralSubsumeesList
+				ArrayList<TreeNode> subsumedConstantsList = null;
+				if (!mostGeneralSubsumeesList.isEmpty()) {
+					subsumedConstantsList = mostGeneralSubsumeesList.get(0).constantsChildren;
+					for (TreeNode currNode : mostGeneralSubsumeesList) {
+						subsumedConstantsList.addAll(currNode.constantsChildren);
+					}
+				}
+
+				// Eliminate those constants that appear in the	constants children of 
+				// mostGeneralSubsumeesList
+				if(constantsList!=null &  subsumedConstantsList!=null)
+					constantsList.removeAll(subsumedConstantsList);
+
+				// Hourglass structure with newNode in between constants and the specific thigies.
+			}
+		}
+		if(relation == "((")
+		{
+			TreeNode newNode = new TreeNode(elem1, elem2, null, null);
+			System.out.println("adding sentence ((");
+			ArrayList<TreeNode> mostSpecificSubsumersList = this.getMostSpecificSubsumers(elem2);
+			for (Iterator iterator = mostSpecificSubsumersList.iterator(); iterator
+			.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				treeNode.children.add(newNode);	
+			}
+
+		}
+
+		if(relation == "->")
+		{
+			TreeNode newNode = new TreeNode(elem1, elem2, null, null);
+			System.out.println("adding sentence ->");
+			ArrayList<TreeNode> mostSpecificSubsumersList = this.getMostSpecificSubsumers(elem2);
+			for (Iterator iterator = mostSpecificSubsumersList.iterator(); iterator
+			.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				treeNode.constantsChildren.add(newNode);
+			}
+		}
+	}
+
+	public void printTree()
+	{
+		ArrayList<TreeNode> nodes = new ArrayList<TreeNode>();
+		ArrayList<TreeNode> temp = new ArrayList<TreeNode>();
+		nodes.add(this.THING);
+		boolean flag = true;
+		int level = 0;
+		while(flag)
+		{
+			temp.clear();
+			for (Iterator iterator = nodes.iterator(); iterator.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				System.out.println("gen" + "level = "+ level);
+				temp.add(treeNode);
+				System.out.println(treeNode+"");
+
+			}
+			level ++ ;
+			nodes.removeAll(temp);
+			System.out.println("Nodes Length" + nodes.size());
+			for (Iterator iterator = temp.iterator(); iterator.hasNext();) {
+				TreeNode treeNode = (TreeNode) iterator.next();
+				System.out.println("Tree Node's children " +  treeNode.children );
+				if(treeNode!=null & treeNode.children.size() !=0)
+					nodes.addAll(treeNode.children);
+			}
+			System.out.println("Nodes nodes after " + nodes + nodes.size());
+			if(nodes.size() == 0)
+			{
+				flag = false;
+			}
+		}
+	}
+
+	/**
+	 * Print menu.
+	 */
+	private void printMenu (BufferedReader br){
+		System.out.println("Welcome to the Taxonomy Viewer.%n");
+		System.out.println("1. Load a fresh set of concepts from a file.");
+		System.out.println("2. View Taxonomy for the existing set of concepts.");
+		System.out.println("3. Read a concept's definition.");
+		System.out.println("4. Insert a new concept into the Taxonomy.");
+		System.out.println("Enter your choice:");
+
+		choice = br.readLine();
+
+	}
+
+	public void runInteraction (BufferedReader br) throws IOException {
+		//			this.printTree();
+		this.convertToDot();
+		//		System.out.println(this.THING + ". Yo, boyz!");
+		this.outputXml();
+
+		System.out.print("Enter your name and press Enter: ");
+		String name = null;
+		Boolean exitFlag = false;
+
+		while (!exitFlag) {
+			printMenu(br);
+			try {
+				name = br.readLine();
+			} catch (IOException e) {
+				exitFlag = true;
+			}
+		}
+		System.out.println("Your name is " + name);
+
+		System.out.println("Bye!");
+	}
+}
+
+
